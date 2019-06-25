@@ -39,8 +39,10 @@ class MapBox extends Component {
   }
 
   componentDidMount() {
-    const {zoom} = this.state;
+    const {zoom, paint} = this.state;
     const {bounding_box} = this.state.dataset;
+    let hoverLineId = null;
+
 
     let cords = Object.keys(bounding_box).map((cords) => {
       return [toLatLon(bounding_box[cords][0], bounding_box[cords][1], 32, "f").latitude, toLatLon(bounding_box[cords][0], bounding_box[cords][1], 32, "f").longitude]
@@ -88,26 +90,34 @@ class MapBox extends Component {
 
     map.on('load', () => {
 
+      map.addSource('xlines', {
+        'type': "geojson",
+        "data": {
+          "type": "FeatureCollection",
+          "features": lines
+        },
+        'generateId': true
+      });
+
       map.addLayer({
         "id": "lines",
         "type": "line",
-        "source": {
-          "type": "geojson",
-          "data": {
-            "type": "FeatureCollection",
-            "features": lines
-          }
-        },
+        "source": "xlines",
         "layout": {
           "line-join": "round",
           "line-cap": "round"
         },
         "paint": {
-          "line-color": "#111",
-          "line-width": 2
+          "line-color": ["case", ["boolean", ["feature-state", "hover"], false], "#FFF000", "#111"],
+          "line-width": ["case", ["boolean", ["feature-state", "hover"], false],
+            10,
+            2
+          ]
         }
       });
+
     });
+
 
     map.on('click', 'lines', function (e) {
       let coordinates = e.features[0].geometry.coordinates.slice();
@@ -115,23 +125,28 @@ class MapBox extends Component {
     });
 
     // Change the cursor to a pointer when the mouse is over the places layer.
-    map.on('mouseenter', 'lines', function () {
+    map.on('mousemove', 'lines', function (e) {
       map.getCanvas().style.cursor = 'pointer';
+      if (e.features.length > 0) {
+        console.log(hoverLineId)
+        if (hoverLineId) {
+          map.setFeatureState({source: 'xlines', id: hoverLineId}, {hover: false});
+        }
+        hoverLineId = e.features[0].id;
+        map.setFeatureState({source: 'xlines', id: hoverLineId}, {hover: true});
+      }
     });
 
 // Change it back to a pointer when it leaves.
     map.on('mouseleave', 'lines', function () {
       map.getCanvas().style.cursor = '';
+      if (hoverLineId >= 0) {
+        map.setFeatureState({source: 'xlines', id: hoverLineId}, {hover: false});
+      }
+      hoverLineId = null;
     });
   }
 
-
-  correctCords(cords) {
-    let tmp = cords[2];
-    cords[2] = cords[3];
-    cords[3] = tmp;
-    return cords;
-  }
 
   bundleCords(cords) {
     let matrix = [], i, k;
@@ -204,6 +219,7 @@ class MapBox extends Component {
 
     return (
       <div>
+        <script type="text/javascript" src="src/mapboxgl-minimap.js"></script>
         <div className={classes.stats}>
           <div>{`Longitude: ${lng} Latitude: ${lat} Zoom: ${zoom}`}</div>
         </div>
